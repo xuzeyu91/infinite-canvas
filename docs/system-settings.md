@@ -61,8 +61,8 @@
     }
   ],
   "promptSync": {
-    "enabled": false,
-    "cron": "0 3 * * *"
+    "enabled": true,
+    "cron": "*/5 * * * *"
   }
 }
 ```
@@ -91,5 +91,5 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `enabled` | boolean | 是否开启定时同步 |
-| `cron` | string | Cron 表达式，默认每天 03:00 |
+| `enabled` | boolean | 是否开启定时同步，默认开启 |
+| `cron` | string | Cron 表达式，默认每 5 分钟 |

@@ -319,63 +319,44 @@
         line-height: 1 !important;
     }
 
-    .canvas-composer-tools {
-        container-type: inline-size;
-    }
-
-    .canvas-composer-icon.ant-btn,
-    .canvas-composer-model-pill {
+    .canvas-composer-icon.ant-btn {
         flex: 0 0 32px;
         width: 32px;
+    }
+
+    .canvas-composer-tools {
+        container-type: inline-size;
     }
 
     .canvas-composer-mode-button {
         width: 32px;
     }
 
-    .canvas-composer-model-text,
-    .canvas-composer-model-arrow,
     .canvas-composer-mode-button span,
+    .canvas-model-picker-text,
+    .canvas-select-chevron,
     .canvas-composer-icon.ant-btn > span:not(.ant-btn-icon) {
         display: none;
     }
 
-    .canvas-composer-model-pill {
-        align-items: center;
-        border: 0;
-        border-radius: 999px;
-        cursor: pointer;
-        display: flex;
-        gap: 7px;
-        height: 32px;
+    .canvas-composer-model-picker {
+        width: 32px;
+        min-width: 32px;
         justify-content: center;
-        padding-inline: 8px;
-        transition: opacity 0.15s ease;
+        gap: 0;
+        padding-inline: 0;
     }
 
-    .canvas-composer-model-pill:hover {
-        opacity: 0.82;
-    }
-
-    @container (min-width: 400px) {
+    @container (min-width: 440px) {
         .canvas-composer-mode-button {
             padding-inline: 8px;
             width: auto;
         }
 
-        .canvas-composer-mode-button span,
-        .canvas-composer-model-text,
-        .canvas-composer-model-arrow {
+        .canvas-composer-mode-button span {
             display: inline;
             font-size: 12px;
             line-height: 1;
-        }
-
-        .canvas-composer-model-pill {
-            flex-basis: 180px;
-            max-width: 180px;
-            width: 180px !important;
-            justify-content: flex-start;
         }
 
         .canvas-composer-icon.ant-btn {
@@ -388,67 +369,19 @@
             display: inline-flex;
             min-width: 0;
         }
-    }
 
-    @container (min-width: 560px) {
-        .canvas-composer-model-pill {
-            flex-basis: 240px;
-            max-width: 240px;
-            width: 240px !important;
+        .canvas-composer-model-picker {
+            width: auto;
+            min-width: 9rem;
+            justify-content: flex-start;
+            gap: 0.5rem;
+            padding-inline: 0.75rem;
         }
 
-        .canvas-composer-icon.ant-btn {
-            flex: 0 1 auto;
-            max-width: 220px;
+        .canvas-model-picker-text,
+        .canvas-select-chevron {
+            display: inline;
         }
-    }
-
-    .canvas-model-dropdown .ant-dropdown-menu {
-        border: 1px solid rgba(120, 113, 108, 0.18);
-        border-radius: 12px;
-        box-shadow: 0 18px 42px rgba(28, 25, 23, 0.18);
-        min-width: 220px;
-        padding: 6px;
-    }
-
-    .canvas-model-dropdown .ant-dropdown-menu-item {
-        border-radius: 8px;
-        color: #292524;
-        font-size: 13px;
-        line-height: 1;
-        margin: 1px 0;
-        min-height: 32px;
-        padding: 7px 10px !important;
-    }
-
-    .canvas-model-dropdown .ant-dropdown-menu-item:hover {
-        background: rgba(28, 25, 23, 0.06) !important;
-    }
-
-    .canvas-model-dropdown .ant-dropdown-menu-item-selected,
-    .canvas-model-dropdown .ant-dropdown-menu-item-selected:hover {
-        background: rgba(28, 25, 23, 0.1) !important;
-        color: #1c1917 !important;
-        font-weight: 500;
-    }
-
-    .dark .canvas-model-dropdown .ant-dropdown-menu {
-        background: #1f1d1a;
-        border-color: rgba(214, 211, 209, 0.14);
-    }
-
-    .dark .canvas-model-dropdown .ant-dropdown-menu-item {
-        color: #f5f5f4;
-    }
-
-    .dark .canvas-model-dropdown .ant-dropdown-menu-item:hover {
-        background: rgba(245, 245, 244, 0.08) !important;
-    }
-
-    .dark .canvas-model-dropdown .ant-dropdown-menu-item-selected,
-    .dark .canvas-model-dropdown .ant-dropdown-menu-item-selected:hover {
-        background: rgba(245, 245, 244, 0.14) !important;
-        color: #fafaf9 !important;
     }
 
     .canvas-control-select.ant-select-focused .ant-select-selector,

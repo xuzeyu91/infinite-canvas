@@ -35,7 +35,7 @@ const emptySettings: AdminSettings = {
             allowCustomChannel: true,
         },
     },
-    private: { channels: [], promptSync: { enabled: false, cron: "0 3 * * *" } },
+    private: { channels: [], promptSync: { enabled: true, cron: "*/5 * * * *" } },
 };
 const emptyChannel: AdminModelChannel = { protocol: "openai", name: "", baseUrl: "", apiKey: "", models: [], weight: 1, enabled: true, remark: "" };
 
@@ -367,8 +367,8 @@ export default function AdminSettingsPage() {
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} md={16}>
-                                            <Form.Item name={["private", "promptSync", "cron"]} label="Cron 表达式" extra="默认每天 03:00 同步内置 GitHub 远程提示词源">
-                                                <Input placeholder="0 3 * * *" />
+                                            <Form.Item name={["private", "promptSync", "cron"]} label="Cron 表达式" extra="默认每 5 分钟同步内置 GitHub 远程提示词源">
+                                                <Input placeholder="*/5 * * * *" />
                                             </Form.Item>
                                         </Col>
                                     </Row>
@@ -601,8 +601,8 @@ function normalizePrivateSetting(setting: Partial<AdminSettings["private"]> = {}
     return {
         channels: (setting.channels || []).map(normalizeChannel),
         promptSync: {
-            enabled: setting.promptSync?.enabled === true,
-            cron: setting.promptSync?.cron || "0 3 * * *",
+            enabled: setting.promptSync?.enabled !== false,
+            cron: setting.promptSync?.cron || "*/5 * * * *",
         },
     };
 }

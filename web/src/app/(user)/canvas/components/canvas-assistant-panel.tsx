@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUp, ChevronDown, Cpu, History, ImageIcon, LoaderCircle, MessageSquare, PanelRightClose, Plus, RotateCcw, Settings2, Sparkles, Trash2, X } from "lucide-react";
-import { Button, Dropdown, Modal, Tooltip } from "antd";
+import { ArrowUp, History, ImageIcon, LoaderCircle, MessageSquare, PanelRightClose, Plus, RotateCcw, Settings2, Sparkles, Trash2, X } from "lucide-react";
+import { Button, Modal, Tooltip } from "antd";
 import { motion } from "motion/react";
 
 import { ImageGenerationPending } from "@/components/image-generation-pending";
+import { ModelPicker } from "@/components/model-picker";
 import { useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { nanoid } from "nanoid";
@@ -421,11 +422,11 @@ function AssistantComposer({
                         <AssistantModeSwitch mode={mode} theme={theme} onChange={onModeChange} />
                         {mode === "image" ? (
                             <>
-                                <ComposerModelPill config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} onMissingConfig={onMissingConfig} />
+                                <ModelPicker className="h-8 shrink-0" config={config} value={config.imageModel || config.model} onChange={(model) => onConfigChange("imageModel", model)} onMissingConfig={onMissingConfig} />
                                 <CanvasImageSettingsPopover config={config} placement="topRight" getPopupContainer={() => document.body} buttonClassName="canvas-composer-settings canvas-composer-icon !h-8 !min-w-8 !rounded-full !px-2" onConfigChange={onConfigChange} onMissingConfig={onMissingConfig} />
                             </>
                         ) : (
-                            <ComposerModelPill config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} onMissingConfig={onMissingConfig} />
+                            <ModelPicker className="h-8 shrink-0" config={config} value={config.textModel || config.model} onChange={(model) => onConfigChange("textModel", model)} onMissingConfig={onMissingConfig} />
                         )}
                     </div>
                     <Button
@@ -441,45 +442,6 @@ function AssistantComposer({
             </div>
         </div>
     );
-}
-
-function ComposerModelPill({ config, value, onChange, onMissingConfig }: { config: AiConfig; value: string; onChange: (model: string) => void; onMissingConfig: () => void }) {
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const options = Array.from(new Set([value, ...config.models].filter(Boolean)));
-    return (
-        <Dropdown
-            trigger={["click"]}
-            overlayClassName="canvas-model-dropdown"
-            menu={{
-                items: options.map((model) => ({ key: model, label: <ModelMenuLabel model={model} /> })),
-                onClick: ({ key }) => onChange(String(key)),
-                selectable: true,
-                selectedKeys: value ? [value] : [],
-            }}
-            onOpenChange={(open) => open && !options.length && onMissingConfig()}
-        >
-            <button type="button" className="canvas-composer-model-pill" style={{ background: theme.node.fill, color: theme.node.text }} onMouseDown={(event) => event.stopPropagation()}>
-                <ModelIcon model={value} />
-                <span className="canvas-composer-model-text truncate">{value || "模型"}</span>
-                <ChevronDown className="canvas-composer-model-arrow size-3.5 opacity-55" />
-            </button>
-        </Dropdown>
-    );
-}
-
-function ModelMenuLabel({ model }: { model: string }) {
-    return (
-        <span className="flex min-w-0 items-center gap-2">
-            <ModelIcon model={model} />
-            <span className="truncate">{model}</span>
-        </span>
-    );
-}
-
-function ModelIcon({ model }: { model: string }) {
-    const name = model.toLowerCase();
-    const icon = name.includes("claude") || name.includes("anthropic") ? "/icons/claude.svg" : name.includes("gemini") || name.includes("google") ? "/icons/gemini.svg" : name.includes("gpt") || name.includes("openai") ? "/icons/openai.svg" : "";
-    return icon ? <img src={icon} alt="" className="size-4 shrink-0" /> : <Cpu className="size-4 shrink-0 opacity-70" />;
 }
 
 function AssistantModeSwitch({ mode, theme, onChange }: { mode: AssistantMode; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onChange: (mode: AssistantMode) => void }) {

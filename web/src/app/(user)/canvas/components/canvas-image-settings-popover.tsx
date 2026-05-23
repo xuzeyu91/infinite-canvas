@@ -105,7 +105,7 @@ export function CanvasImageSettingsPopover({ config, onConfigChange, onOpenChang
                             </div>
                         </div>
                         <div className="space-y-3">
-                            <SettingTitle color={theme.node.muted}>生成数量</SettingTitle>
+                            <SettingTitle color={theme.node.muted}>生成张数</SettingTitle>
                             <div className="grid grid-cols-4 gap-3">
                                 {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
                                     <OptionPill key={value} selected={count === value} theme={theme} onClick={() => onConfigChange("count", String(value))}>
@@ -165,7 +165,7 @@ function DimensionInput({ prefix, value, disabled, theme, onChange }: { prefix: 
                 type="number"
                 min={1}
                 disabled={disabled}
-                className="min-w-0 flex-1 bg-transparent px-2 outline-none"
+                className="min-w-0 flex-1 bg-transparent px-2 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 value={value || ""}
                 onChange={(event) => onChange(Number(event.target.value) || null)}
                 onMouseDown={(event) => event.stopPropagation()}
@@ -181,7 +181,7 @@ function CountInput({ value, theme, onChange }: { value: number; theme: (typeof 
                 type="number"
                 min={1}
                 max={15}
-                className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none"
+                className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 style={{ color: theme.node.text, WebkitTextFillColor: theme.node.text }}
                 value={value || ""}
                 onChange={(event) => onChange(Number(event.target.value) || null)}
