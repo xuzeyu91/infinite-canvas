@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUp, LoaderCircle, Square } from "lucide-react";
-import { Button } from "antd";
+import { ArrowUp, LoaderCircle, Sparkles, Square } from "lucide-react";
+import { App, Button } from "antd";
 
 import { ModelPicker } from "@/components/model-picker";
 import { defaultConfig, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { CreditSymbol, requestCreditCost } from "@/constant/credits";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { requestImageQuestion } from "@/services/api/image";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
@@ -31,8 +32,10 @@ type CanvasNodePromptPanelProps = {
 };
 
 export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], onImageSettingsOpenChange }: CanvasNodePromptPanelProps) {
+    const { message } = App.useApp();
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const isAiConfigReady = useConfigStore((state) => state.isAiConfigReady);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = defaultMode(node.type);
     const config = buildNodeConfig(globalConfig, node, mode);
@@ -40,6 +43,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(isEditingExistingContent ? "" : node.metadata?.prompt || "");
+    const [optimizing, setOptimizing] = useState(false);
     const credits = requestCreditCost({ channelMode: config.channelMode, model: config.model, count: mode === "image" ? config.count : 1 });
 
     useEffect(() => {
@@ -56,6 +60,44 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
         if (!text || isRunning) return;
         onGenerate(node.id, mode, text);
         setPrompt("");
+    };
+
+    const optimizePrompt = async () => {
+        const rawPrompt = prompt.trim();
+        if (!rawPrompt || optimizing || isRunning) return;
+        const optimizeModel = resolveNodeModelByMode(node.metadata, "text") || globalConfig.textModel || globalConfig.model || defaultConfig.textModel;
+        const optimizeConfig: AiConfig = { ...config, model: optimizeModel, textModel: optimizeModel };
+        if (!isAiConfigReady(optimizeConfig, optimizeModel)) {
+            openConfigDialog(true);
+            return;
+        }
+        setOptimizing(true);
+        try {
+            let streamed = "";
+            const optimized = await requestImageQuestion(
+                optimizeConfig,
+                [{ role: "user", content: buildPromptOptimizationInstruction(mode, rawPrompt, node, mentionReferences) }],
+                (text) => {
+                    streamed = text;
+                },
+            );
+            const normalized = normalizeOptimizedPrompt(optimized || streamed);
+            const limited = limitPromptLengthByMode(normalized || rawPrompt, mode);
+            if (!limited) {
+                message.warning("AI 优化未返回有效提示词");
+                return;
+            }
+            if (limited === "没有返回内容") {
+                message.warning("AI 优化未返回有效提示词");
+                return;
+            }
+            updatePrompt(limited);
+            message.success("已按当前场景优化提示词");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "AI 优化失败");
+        } finally {
+            setOptimizing(false);
+        }
     };
 
     return (
@@ -79,6 +121,15 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
             <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                     <CanvasPromptLibrary onSelect={updatePrompt} />
+                    <Button
+                        className="!h-10 !shrink-0 !rounded-full !px-3"
+                        icon={<Sparkles className="size-4" />}
+                        disabled={!prompt.trim() || isRunning}
+                        loading={optimizing}
+                        onClick={() => void optimizePrompt()}
+                    >
+                        AI优化
+                    </Button>
                     {mode === "image" ? (
                         <>
                             <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability="image" onMissingConfig={() => openConfigDialog(true)} />
@@ -198,4 +249,80 @@ function audioConfigPatch(key: CanvasAudioSettingKey, value: string) {
     if (key === "audioFormat") return { audioFormat: value };
     if (key === "audioSpeed") return { audioSpeed: value };
     return { audioInstructions: value };
+}
+
+function buildPromptOptimizationInstruction(mode: CanvasNodeGenerationMode, prompt: string, node: CanvasNodeData, references: CanvasResourceReference[]) {
+    const modeLabel = mode === "image" ? "图片" : mode === "video" ? "视频" : mode === "audio" ? "音频" : "文本";
+    const modeFocus = mode === "image" ? "重点补齐主体、构图、风格、光线、材质。" : mode === "video" ? "重点补齐主体动作、镜头运动、节奏和氛围。" : mode === "audio" ? "重点补齐音色、语速、情绪和用途场景。" : "重点补齐目标读者、语气和输出结构。";
+    const lengthHint = mode === "video" ? "80~220 字" : mode === "image" ? "60~180 字" : "40~160 字";
+    const nodeContext = summarizeNodeContext(node);
+    const referenceContext = summarizeScenarioReferences(references);
+    return `你是提示词优化助手。请把“用户原始输入”优化成适合${modeLabel}生成的可执行提示词。
+
+规则：
+1. 保留用户核心意图与限制，不要改题。
+2. 结合“场景参考”自动补足必要信息，但不要编造剧情。
+3. ${modeFocus}
+4. 输出简洁直接，不要小说化描述，长度建议 ${lengthHint}。
+5. 只输出最终提示词，不要解释、不要加标题、不要 Markdown。
+
+当前节点上下文：
+${nodeContext}
+
+场景参考：
+${referenceContext}
+
+用户原始输入：
+${prompt}`;
+}
+
+function summarizeNodeContext(node: CanvasNodeData) {
+    if (node.type === CanvasNodeType.Image && node.metadata?.content) return "当前节点已有图片内容，本次更偏向图像编辑指令。";
+    if (node.type === CanvasNodeType.Text && node.metadata?.content?.trim()) return `当前节点已有文本：${trimByChars(node.metadata.content, 120)}`;
+    if (node.type === CanvasNodeType.Video && node.metadata?.content) return "当前节点已有视频内容，本次更偏向视频编辑或重生成指令。";
+    if (node.type === CanvasNodeType.Audio && node.metadata?.content) return "当前节点已有音频内容，本次更偏向音频编辑或重生成指令。";
+    return "当前节点无既有内容。";
+}
+
+function summarizeScenarioReferences(references: CanvasResourceReference[]) {
+    if (!references.length) return "无可用参考。";
+    return references
+        .slice(0, 6)
+        .map((item) => {
+            const kind = item.kind === "image" ? "图片" : item.kind === "video" ? "视频" : item.kind === "audio" ? "音频" : "文本";
+            const detail = item.kind === "text" ? trimByChars(item.text || item.title || "", 70) : item.title || item.label;
+            return `- ${item.label}（${kind}）：${detail || "无描述"}`;
+        })
+        .join("\n");
+}
+
+function normalizeOptimizedPrompt(value: string) {
+    let text = value.trim();
+    if (!text) return "";
+    if (text.startsWith("```")) {
+        text = text.replace(/^```[\w-]*\s*/i, "").replace(/```$/, "").trim();
+    }
+    if (text.startsWith("{") && text.endsWith("}")) {
+        try {
+            const parsed = JSON.parse(text) as Record<string, unknown>;
+            const candidate = String(parsed.optimizedPrompt || parsed.prompt || parsed.text || parsed.content || "").trim();
+            if (candidate) text = candidate;
+        } catch {
+            // ignore invalid json
+        }
+    }
+    return text.replace(/^(优化后提示词|提示词|Optimized Prompt|Prompt)\s*[:：]\s*/i, "").trim();
+}
+
+function limitPromptLengthByMode(value: string, mode: CanvasNodeGenerationMode) {
+    const maxChars = mode === "video" ? 320 : mode === "image" ? 260 : 220;
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (Array.from(normalized).length <= maxChars) return normalized;
+    return trimByChars(normalized, maxChars);
+}
+
+function trimByChars(value: string, maxChars: number) {
+    const chars = Array.from(value);
+    if (chars.length <= maxChars) return value.trim();
+    return `${chars.slice(0, Math.max(0, maxChars - 1)).join("").trim()}…`;
 }
