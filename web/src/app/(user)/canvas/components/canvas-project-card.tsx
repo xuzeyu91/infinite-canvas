@@ -2,7 +2,7 @@
 
 import { Check, Download, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Button, Input } from "antd";
+import { Button, Card, Input } from "antd";
 
 import { useCanvasStore, type CanvasProject } from "../stores/use-canvas-store";
 import { useCanvasUiStore } from "../stores/use-canvas-ui-store";
@@ -28,7 +28,20 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     };
 
     return (
-        <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-xl border border-border bg-card p-5 transition-all hover:border-stone-400 dark:hover:border-zinc-500 hover:shadow-md" onClick={() => !editing && open()}>
+        <Card
+            hoverable
+            className="cursor-pointer"
+            styles={{
+                body: {
+                    padding: "20px",
+                    minHeight: "176px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                },
+            }}
+            onClick={() => !editing && open()}
+        >
             <div className="flex items-start gap-3">
                 <input
                     type="checkbox"
@@ -73,6 +86,6 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                     )}
                 </div>
             </div>
-        </article>
+        </Card>
     );
 }

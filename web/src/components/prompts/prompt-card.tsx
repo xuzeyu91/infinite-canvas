@@ -23,6 +23,8 @@ export function PromptCard({
     actionType?: "text" | "primary";
     extraAction?: ReactNode;
 }) {
+    const coverUrl = item.coverUrl.trim();
+
     return (
         <Card
             hoverable
@@ -30,7 +32,11 @@ export function PromptCard({
             styles={{ body: { padding: 0 } }}
             cover={
                 <button type="button" className="block w-full text-left" onClick={onOpen}>
-                    <img src={item.coverUrl} alt={item.title} className="aspect-[4/3] w-full object-cover" />
+                    {coverUrl ? (
+                        <img src={coverUrl} alt={item.title} className="aspect-[4/3] w-full object-cover" />
+                    ) : (
+                        <div className="aspect-[4/3] w-full bg-stone-100 dark:bg-stone-800" />
+                    )}
                 </button>
             }
         >
