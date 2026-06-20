@@ -101,7 +101,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
             </div>
 
             <div className={`mb-2 grid min-w-0 cursor-default items-center gap-2 ${mode === "image" || mode === "video" || mode === "audio" ? "grid-cols-[minmax(0,1fr)_148px]" : "grid-cols-1"}`} onMouseDown={(event) => event.stopPropagation()}>
-                <ModelPicker className="canvas-compact-control h-10" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability={mode} onMissingConfig={() => openConfigDialog(true)} fullWidth />
+                <ModelPicker className="canvas-compact-control h-10" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability={mode} onMissingConfig={() => openConfigDialog(true)} fullWidth />
                 {mode === "video" ? (
                     <CanvasVideoSettingsPopover config={config} placement="topRight" buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value))} />
                 ) : mode === "image" ? (
@@ -155,7 +155,7 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
     const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
     return {
         ...globalConfig,
-        model: node.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
+        model: resolveNodeModelByMode(node.metadata, mode) || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
         quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
         size: node.metadata?.size || globalConfig.size || defaultConfig.size,
         videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
@@ -168,6 +168,26 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
         count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
     };
+}
+
+function modelPatchByMode(mode: CanvasGenerationMode, model: string): Partial<CanvasNodeMetadata> {
+    const key = modelFieldByMode(mode);
+    return { model, [key]: model };
+}
+
+function resolveNodeModelByMode(metadata: CanvasNodeMetadata | undefined, mode: CanvasGenerationMode) {
+    if (!metadata) return "";
+    const key = modelFieldByMode(mode);
+    if (metadata[key]) return metadata[key];
+    const hasModeSpecificModel = Boolean(metadata.imageModel || metadata.videoModel || metadata.textModel || metadata.audioModel);
+    return hasModeSpecificModel ? "" : metadata.model || "";
+}
+
+function modelFieldByMode(mode: CanvasGenerationMode) {
+    if (mode === "image") return "imageModel" as const;
+    if (mode === "video") return "videoModel" as const;
+    if (mode === "audio") return "audioModel" as const;
+    return "textModel" as const;
 }
 
 function videoConfigPatch(key: keyof AiConfig, value: string) {

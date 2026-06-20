@@ -14,7 +14,7 @@ import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
-import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "../types";
+import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData, type CanvasNodeMetadata } from "../types";
 import type { CanvasResourceReference } from "../utils/canvas-resource-references";
 
 export type CanvasNodeGenerationMode = CanvasGenerationMode;
@@ -81,7 +81,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                     <CanvasPromptLibrary onSelect={updatePrompt} />
                     {mode === "image" ? (
                         <>
-                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="image" onMissingConfig={() => openConfigDialog(true)} />
+                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability="image" onMissingConfig={() => openConfigDialog(true)} />
                             <CanvasImageSettingsPopover
                                 config={config}
                                 placement="topLeft"
@@ -93,16 +93,16 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                         </>
                     ) : mode === "video" ? (
                         <>
-                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="video" onMissingConfig={() => openConfigDialog(true)} />
+                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability="video" onMissingConfig={() => openConfigDialog(true)} />
                             <CanvasVideoSettingsPopover config={config} buttonClassName="!h-10 !max-w-[170px] !justify-start !rounded-full !px-3" onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value))} />
                         </>
                     ) : mode === "audio" ? (
                         <>
-                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="audio" onMissingConfig={() => openConfigDialog(true)} />
+                            <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability="audio" onMissingConfig={() => openConfigDialog(true)} />
                             <CanvasAudioSettingsPopover config={config} buttonClassName="!h-10 !max-w-[170px] !justify-start !rounded-full !px-3" onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))} />
                         </>
                     ) : (
-                        <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="text" onMissingConfig={() => openConfigDialog(true)} />
+                        <ModelPicker className="h-10 max-w-[180px]" config={config} value={config.model} onChange={(model) => onConfigChange(node.id, modelPatchByMode(mode, model))} capability="text" onMissingConfig={() => openConfigDialog(true)} />
                     )}
                 </div>
                 <Button
@@ -144,7 +144,7 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
     const defaultModel = mode === "image" ? globalConfig.imageModel : mode === "video" ? globalConfig.videoModel : mode === "audio" ? globalConfig.audioModel : globalConfig.textModel;
     return {
         ...globalConfig,
-        model: node.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
+        model: resolveNodeModelByMode(node.metadata, mode) || defaultModel || (mode === "audio" ? defaultConfig.audioModel : globalConfig.model || defaultConfig.model),
         quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
         size: node.metadata?.size || globalConfig.size || defaultConfig.size,
         videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
@@ -157,6 +157,26 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
         audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
         count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
     };
+}
+
+function modelPatchByMode(mode: CanvasNodeGenerationMode, model: string): Partial<CanvasNodeMetadata> {
+    const key = modelFieldByMode(mode);
+    return { model, [key]: model };
+}
+
+function resolveNodeModelByMode(metadata: CanvasNodeMetadata | undefined, mode: CanvasNodeGenerationMode) {
+    if (!metadata) return "";
+    const key = modelFieldByMode(mode);
+    if (metadata[key]) return metadata[key];
+    const hasModeSpecificModel = Boolean(metadata.imageModel || metadata.videoModel || metadata.textModel || metadata.audioModel);
+    return hasModeSpecificModel ? "" : metadata.model || "";
+}
+
+function modelFieldByMode(mode: CanvasNodeGenerationMode) {
+    if (mode === "image") return "imageModel" as const;
+    if (mode === "video") return "videoModel" as const;
+    if (mode === "audio") return "audioModel" as const;
+    return "textModel" as const;
 }
 
 function promptPlaceholder(mode: CanvasNodeGenerationMode, hasImageContent: boolean, hasTextContent: boolean) {

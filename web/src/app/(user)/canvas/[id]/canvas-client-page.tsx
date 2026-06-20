@@ -578,7 +578,15 @@ function InfiniteCanvasPage() {
 
     const createConnectedNode = useCallback(
         (type: CanvasNodeType.Image | CanvasNodeType.Text | CanvasNodeType.Config | CanvasNodeType.Video | CanvasNodeType.Audio, pending: PendingConnectionCreate) => {
-            const metadata = type === CanvasNodeType.Config ? { model: effectiveConfig.imageModel || effectiveConfig.model, size: effectiveConfig.size, count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count) } : undefined;
+            const metadata =
+                type === CanvasNodeType.Config
+                    ? {
+                          model: effectiveConfig.imageModel || effectiveConfig.model,
+                          imageModel: effectiveConfig.imageModel || effectiveConfig.model,
+                          size: effectiveConfig.size,
+                          count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count),
+                      }
+                    : undefined;
             const newNode = createCanvasNode(type, pending.position, metadata);
             const connection = normalizeConnection(pending.connection.nodeId, newNode.id, [...nodesRef.current, newNode], pending.connection.handleType);
             if (!connection) {
@@ -772,6 +780,7 @@ function InfiniteCanvasPage() {
                 type === CanvasNodeType.Config
                     ? {
                           model: effectiveConfig.imageModel || effectiveConfig.model,
+                          imageModel: effectiveConfig.imageModel || effectiveConfig.model,
                           size: effectiveConfig.size,
                           count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count),
                       }
@@ -1593,6 +1602,7 @@ function InfiniteCanvasPage() {
                     {
                         generationMode: "text",
                         model: effectiveConfig.textModel || effectiveConfig.model || defaultConfig.textModel,
+                        textModel: effectiveConfig.textModel || effectiveConfig.model || defaultConfig.textModel,
                         count: 1,
                         composerContent: `参考图片：@[node:${node.id}]\n任务说明：@[node:${textNode.id}]`,
                     },
@@ -2372,6 +2382,7 @@ function InfiniteCanvasPage() {
                 {
                     prompt: "",
                     model: effectiveConfig.imageModel || effectiveConfig.model,
+                    imageModel: effectiveConfig.imageModel || effectiveConfig.model,
                     size: effectiveConfig.size,
                     count: getGenerationCount(effectiveConfig.canvasImageCount || effectiveConfig.count),
                 },
@@ -3122,7 +3133,7 @@ function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefine
     const defaultModel = mode === "image" ? config.imageModel : mode === "video" ? config.videoModel : mode === "audio" ? config.audioModel : config.textModel;
     return {
         ...config,
-        model: node?.metadata?.model || defaultModel || (mode === "audio" ? defaultConfig.audioModel : config.model || defaultConfig.model),
+        model: resolveNodeModelByMode(node?.metadata, mode) || defaultModel || (mode === "audio" ? defaultConfig.audioModel : config.model || defaultConfig.model),
         quality: node?.metadata?.quality || config.quality || defaultConfig.quality,
         size: node?.metadata?.size || config.size || defaultConfig.size,
         videoSeconds: node?.metadata?.seconds || config.videoSeconds || defaultConfig.videoSeconds,
@@ -3135,6 +3146,21 @@ function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | undefine
         audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
         count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
     };
+}
+
+function resolveNodeModelByMode(metadata: CanvasNodeMetadata | undefined, mode: CanvasNodeGenerationMode) {
+    if (!metadata) return "";
+    const key = modelFieldByMode(mode);
+    if (metadata[key]) return metadata[key];
+    const hasModeSpecificModel = Boolean(metadata.imageModel || metadata.videoModel || metadata.textModel || metadata.audioModel);
+    return hasModeSpecificModel ? "" : metadata.model || "";
+}
+
+function modelFieldByMode(mode: CanvasNodeGenerationMode) {
+    if (mode === "image") return "imageModel" as const;
+    if (mode === "video") return "videoModel" as const;
+    if (mode === "audio") return "audioModel" as const;
+    return "textModel" as const;
 }
 
 function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
