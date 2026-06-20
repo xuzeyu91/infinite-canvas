@@ -45,7 +45,7 @@ export default function IndexPage() {
                     <h1 className="ai-title-aurora max-w-5xl text-balance text-5xl font-semibold tracking-normal sm:text-7xl lg:text-8xl">BigBanana Canvas</h1>
                     <p className="mt-8 max-w-3xl text-balance text-lg leading-8 text-stone-500 dark:text-stone-400">
                         在
-                        <Highlighter action="underline" color="#FF9800">
+                        <Highlighter action="highlight" color="#FF9800">
                             BigBanana Canvas
                         </Highlighter>
                         中生成、连接和重组
