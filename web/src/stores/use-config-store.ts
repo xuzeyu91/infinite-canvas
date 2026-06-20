@@ -351,13 +351,18 @@ export function resolveModelChannel(config: AiConfig, value: string) {
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
+    const model = modelOptionName(value || config.model);
     return {
         ...config,
-        model: modelOptionName(value || config.model),
+        model,
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
-        apiFormat: channel.apiFormat,
+        apiFormat: inferApiFormatByModel(model, channel.apiFormat),
     };
+}
+
+function inferApiFormatByModel(model: string, fallback: ApiCallFormat): ApiCallFormat {
+    return model.trim().toLowerCase().includes("gemini") ? "gemini" : fallback;
 }
 
 function normalizeChannels(config: AiConfig) {

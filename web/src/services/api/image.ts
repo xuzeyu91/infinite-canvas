@@ -800,15 +800,45 @@ async function requestGeminiImages(config: AiConfig, prompt: string, references:
     return (await Promise.all(requests)).flat();
 }
 
+function toGeminiAspectRatio(size: string) {
+    const value = size.trim();
+    if (!value || value === "auto") return undefined;
+    if (/^\d+:\d+$/.test(value)) return value;
+    const dimensions = value.match(/^(\d+)x(\d+)$/i);
+    if (!dimensions) return undefined;
+    const width = Number(dimensions[1]);
+    const height = Number(dimensions[2]);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return undefined;
+    const divisor = gcd(width, height);
+    return `${Math.round(width / divisor)}:${Math.round(height / divisor)}`;
+}
+
+function gcd(a: number, b: number): number {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    while (y) {
+        const t = y;
+        y = x % y;
+        x = t;
+    }
+    return x || 1;
+}
+
 async function requestGeminiImagesOnce(config: AiConfig, prompt: string, references: ReferenceImage[], options?: RequestOptions) {
     const parts: GeminiPart[] = [{ text: prompt }];
     for (const image of references) {
         parts.push(toGeminiImagePart(await imageToDataUrl(image)));
     }
+    const aspectRatio = toGeminiAspectRatio(config.size);
     const response = await axios.post<GeminiPayload>(
         geminiApiUrl(config, "generateContent"),
         {
-            ...toGeminiBody(config, [{ role: "user", content: prompt }], { generationConfig: { responseModalities: ["TEXT", "IMAGE"] } }),
+            ...toGeminiBody(config, [{ role: "user", content: prompt }], {
+                generationConfig: {
+                    responseModalities: ["TEXT", "IMAGE"],
+                    ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
+                },
+            }),
             contents: [{ role: "user", parts }],
         },
         { headers: geminiHeaders(config), signal: options?.signal },
