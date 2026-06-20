@@ -2,7 +2,7 @@
 
 import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
 import { Cloud, RefreshCw, Wifi } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
@@ -55,6 +55,11 @@ function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProg
     );
 }
 
+function hasSameModels(left: string[], right: string[]) {
+    if (left.length !== right.length) return false;
+    return left.every((value, index) => value === right[index]);
+}
+
 export function AppConfigModal() {
     const { message } = App.useApp();
     const [activeTab, setActiveTab] = useState("channels");
@@ -72,6 +77,17 @@ export function AppConfigModal() {
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
     const modelOptions = config.models.map((model) => ({ label: modelOptionLabel(config, model), value: model }));
+    const modelOptionsByCapability = useMemo(
+        () =>
+            modelGroups.reduce(
+                (all, group) => ({
+                    ...all,
+                    [group.capability]: modelOptions.filter((option) => filterModelsByCapability([option.value], group.capability).length > 0),
+                }),
+                {} as Record<ModelCapability, Array<{ label: string; value: string }>>,
+            ),
+        [modelOptions],
+    );
     const webdavReady = Boolean(webdav.url.trim());
 
     useEffect(() => {
@@ -85,6 +101,20 @@ export function AppConfigModal() {
             missingApiKeyNoticeShownRef.current = true;
         }
     }, [isConfigOpen, message, shouldPromptContinue]);
+
+    useEffect(() => {
+        if (!isConfigOpen) return;
+        modelGroups.forEach((group) => {
+            const filteredModels = uniqueModels(filterModelsByCapability(config[group.modelsKey], group.capability));
+            if (!hasSameModels(filteredModels, config[group.modelsKey])) {
+                updateConfig(group.modelsKey, filteredModels);
+            }
+            const normalizedDefault = filteredModels.includes(config[group.modelKey]) ? config[group.modelKey] : filteredModels[0] || "";
+            if (normalizedDefault !== config[group.modelKey]) {
+                updateConfig(group.modelKey, normalizedDefault);
+            }
+        });
+    }, [config, isConfigOpen, updateConfig]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -113,7 +143,7 @@ export function AppConfigModal() {
     };
 
     const updateCapabilityModels = (group: ModelGroup, models: string[]) => {
-        const next = uniqueModels(models.map((model) => normalizeModelOptionValue(model, config.channels)).filter(Boolean));
+        const next = uniqueModels(filterModelsByCapability(models.map((model) => normalizeModelOptionValue(model, config.channels)).filter(Boolean), group.capability));
         updateConfig(group.modelsKey, next);
         if (!next.includes(config[group.modelKey])) updateConfig(group.modelKey, next[0] || "");
     };
@@ -259,8 +289,8 @@ export function AppConfigModal() {
                                                 allowClear
                                                 maxTagCount="responsive"
                                                 placeholder={config.models.length ? `请选择或输入${group.optionsLabel}` : "先到渠道里填写模型"}
-                                                value={config[group.modelsKey]}
-                                                options={modelOptions}
+                                                value={filterModelsByCapability(config[group.modelsKey], group.capability)}
+                                                options={modelOptionsByCapability[group.capability]}
                                                 onChange={(models) => updateCapabilityModels(group, models)}
                                             />
                                         </Form.Item>
@@ -382,10 +412,10 @@ export function AppConfigModal() {
 
 function withChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
     const models = modelOptionsFromChannels(channels);
-    const imageModels = keepOrSuggest(config.imageModels, filterModelsByCapability(models, "image"), models);
-    const videoModels = keepOrSuggest(config.videoModels, filterModelsByCapability(models, "video"), models);
-    const textModels = keepOrSuggest(config.textModels, filterModelsByCapability(models, "text"), models);
-    const audioModels = keepOrSuggest(config.audioModels, filterModelsByCapability(models, "audio"), models);
+    const imageModels = keepOrSuggest(config.imageModels, filterModelsByCapability(models, "image"));
+    const videoModels = keepOrSuggest(config.videoModels, filterModelsByCapability(models, "video"));
+    const textModels = keepOrSuggest(config.textModels, filterModelsByCapability(models, "text"));
+    const audioModels = keepOrSuggest(config.audioModels, filterModelsByCapability(models, "audio"));
     return {
         ...config,
         channels,
@@ -404,8 +434,8 @@ function withChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
     };
 }
 
-function keepOrSuggest(current: string[], suggested: string[], allModels: string[]) {
-    const available = new Set(allModels);
+function keepOrSuggest(current: string[], suggested: string[]) {
+    const available = new Set(suggested);
     const kept = uniqueModels(current).filter((model) => available.has(model));
     return kept.length ? kept : suggested;
 }

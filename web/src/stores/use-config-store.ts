@@ -168,7 +168,7 @@ export function filterModelsByCapability(models: string[], capability?: ModelCap
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
     if (!capability) return config.models;
-    return config[modelListKey(capability)];
+    return filterModelsByCapability(config[modelListKey(capability)], capability);
 }
 
 function modelListKey(capability: ModelCapability) {
@@ -218,22 +218,22 @@ export const useConfigStore = create<ConfigStore>()(
                 const channels = normalizeChannels(config);
                 const models = modelOptionsFromChannels(channels);
                 const imageModels = ensureModelListIncludes(
-                    Array.isArray(persistedConfig.imageModels) ? normalizeModelList(config.imageModels, channels) : filterModelsByCapability(models, "image"),
+                    Array.isArray(persistedConfig.imageModels) ? filterModelsByCapability(normalizeModelList(config.imageModels, channels), "image") : filterModelsByCapability(models, "image"),
                     channels,
                     [DEFAULT_IMAGE_MODEL_NAME],
                 );
                 const videoModels = ensureModelListIncludes(
-                    Array.isArray(persistedConfig.videoModels) ? normalizeModelList(config.videoModels, channels) : filterModelsByCapability(models, "video"),
+                    Array.isArray(persistedConfig.videoModels) ? filterModelsByCapability(normalizeModelList(config.videoModels, channels), "video") : filterModelsByCapability(models, "video"),
                     channels,
                     DEFAULT_VIDEO_MODEL_NAMES,
                 );
                 const textModels = ensureModelListIncludes(
-                    Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels, channels) : filterModelsByCapability(models, "text"),
+                    Array.isArray(persistedConfig.textModels) ? filterModelsByCapability(normalizeModelList(config.textModels, channels), "text") : filterModelsByCapability(models, "text"),
                     channels,
                     DEFAULT_TEXT_MODEL_NAMES,
                 );
                 const audioModels = ensureModelListIncludes(
-                    Array.isArray(persistedConfig.audioModels) ? normalizeModelList(config.audioModels, channels) : filterModelsByCapability(models, "audio"),
+                    Array.isArray(persistedConfig.audioModels) ? filterModelsByCapability(normalizeModelList(config.audioModels, channels), "audio") : filterModelsByCapability(models, "audio"),
                     channels,
                     DEFAULT_AUDIO_MODEL_NAMES,
                 );
