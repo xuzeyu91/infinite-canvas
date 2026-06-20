@@ -38,7 +38,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
                             }
                           : channel,
                   )
-                : [createModelChannel({ id: "default", name: "默认渠道", baseUrl: ANTSK_BASE_URL, apiKey: apiKey || "" })],
+                : [createModelChannel({ id: "default", name: "BigBanana API", baseUrl: ANTSK_BASE_URL, apiKey: apiKey || "" })],
         );
         updateConfig("baseUrl", ANTSK_BASE_URL);
         if (apiKey) updateConfig("apiKey", apiKey);

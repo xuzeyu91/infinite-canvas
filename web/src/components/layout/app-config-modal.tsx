@@ -2,7 +2,7 @@
 
 import { App, Button, Form, Input, Modal, Progress, Segmented, Select, Tabs } from "antd";
 import { CircleAlert, Cloud, RefreshCw, Wifi } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { fetchChannelModels } from "@/services/api/image";
@@ -44,6 +44,7 @@ const webdavDomainLabels: Record<AppSyncDomainKey, string> = {
     canvas: "画布",
     assets: "我的素材",
 };
+const missingApiKeyHint = "请先在“渠道”里填写 API Key，保存后即可使用生成功能。";
 
 function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProgress> {
     return webdavDomainKeys.reduce(
@@ -63,6 +64,7 @@ export function AppConfigModal() {
     const [syncingWebdav, setSyncingWebdav] = useState(false);
     const [webdavSyncStatus, setWebdavSyncStatus] = useState("");
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
+    const missingApiKeyNoticeShownRef = useRef(false);
     const config = useConfigStore((state) => state.config);
     const webdav = useConfigStore((state) => state.webdav);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -73,6 +75,18 @@ export function AppConfigModal() {
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
     const modelOptions = config.models.map((model) => ({ label: modelOptionLabel(config, model), value: model }));
     const webdavReady = Boolean(webdav.url.trim());
+
+    useEffect(() => {
+        if (!isConfigOpen || !shouldPromptContinue) {
+            missingApiKeyNoticeShownRef.current = false;
+            return;
+        }
+        setActiveTab("channels");
+        if (!missingApiKeyNoticeShownRef.current) {
+            message.warning(missingApiKeyHint);
+            missingApiKeyNoticeShownRef.current = true;
+        }
+    }, [isConfigOpen, message, shouldPromptContinue]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -195,6 +209,11 @@ export function AppConfigModal() {
                 </Button>
             }
         >
+            {shouldPromptContinue ? (
+                <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
+                    当前功能需要可用的 API Key。请先在“渠道”页填写 API Key，保存后再继续生成。
+                </div>
+            ) : null}
             <Tabs
                 activeKey={activeTab}
                 onChange={setActiveTab}
