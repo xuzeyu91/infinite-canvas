@@ -61,15 +61,17 @@ export type ModelCapability = "image" | "video" | "text" | "audio";
 const CHANNEL_MODEL_SEPARATOR = "::";
 export const ANTSK_BASE_URL = "https://api.antsk.cn";
 const DEFAULT_IMAGE_MODEL_NAME = "gemini-3-pro-image-preview";
-const DEFAULT_IMAGE_MODEL_NAMES = ["gpt-image-2", DEFAULT_IMAGE_MODEL_NAME];
-const DEFAULT_VIDEO_MODEL_NAMES = ["sora-2", "veo_3_1-fast", "viduq3-turbo", "viduq3-pro", "doubao-seedance-1-5-pro", "doubao-seedance-2-0-fast", "doubao-seedance-2-0"];
+const DEFAULT_IMAGE_MODEL_NAMES = [DEFAULT_IMAGE_MODEL_NAME, "gemini-3.1-flash-image-preview", "gpt-image-2", "gpt-image-1.5"];
+const DEFAULT_VIDEO_MODEL_NAMES = ["sora-2", "veo_3_1-fast", "viduq3-turbo", "viduq3-pro", "doubao-seedance-1-5-pro", "doubao-seedance-2-0-fast", "doubao-seedance-2-0", "happyhorse-1.0"];
 const DEFAULT_TEXT_MODEL_NAME = "gpt-5.4";
+const DEFAULT_TEXT_MODEL_NAMES = ["gpt-5.5", DEFAULT_TEXT_MODEL_NAME, "gpt-5.2", "gpt-5.1", "claude-sonnet-4-6", "claude-opus-4-6", "claude-opus-4-7", "gemini-3.1-pro-preview"];
 const DEFAULT_AUDIO_MODEL_NAME = "gpt-audio-1.5";
+const DEFAULT_AUDIO_MODEL_NAMES = [DEFAULT_AUDIO_MODEL_NAME, "gpt-audio-mini"];
 const LEGACY_IMAGE_DEFAULT_MODEL_NAMES = new Set(["gpt-image-2"]);
 const LEGACY_VIDEO_DEFAULT_MODEL_NAMES = new Set(["grok-imagine-video"]);
 const LEGACY_TEXT_DEFAULT_MODEL_NAMES = new Set(["gpt-5.5"]);
 const LEGACY_AUDIO_DEFAULT_MODEL_NAMES = new Set(["gpt-4o-mini-tts"]);
-const DEFAULT_CHANNEL_MODEL_NAMES = uniqueRawModels([...DEFAULT_VIDEO_MODEL_NAMES, ...DEFAULT_IMAGE_MODEL_NAMES, DEFAULT_TEXT_MODEL_NAME, DEFAULT_AUDIO_MODEL_NAME]);
+const DEFAULT_CHANNEL_MODEL_NAMES = uniqueRawModels([...DEFAULT_VIDEO_MODEL_NAMES, ...DEFAULT_IMAGE_MODEL_NAMES, ...DEFAULT_TEXT_MODEL_NAMES, ...DEFAULT_AUDIO_MODEL_NAMES]);
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
@@ -103,8 +105,8 @@ export const defaultConfig: AiConfig = {
     models: DEFAULT_CHANNEL_MODEL_NAMES.map((model) => encodeChannelModel("default", model)),
     imageModels: DEFAULT_IMAGE_MODEL_NAMES.map((model) => encodeChannelModel("default", model)),
     videoModels: DEFAULT_VIDEO_MODEL_NAMES.map((model) => encodeChannelModel("default", model)),
-    textModels: [encodeChannelModel("default", DEFAULT_TEXT_MODEL_NAME)],
-    audioModels: [encodeChannelModel("default", DEFAULT_AUDIO_MODEL_NAME)],
+    textModels: DEFAULT_TEXT_MODEL_NAMES.map((model) => encodeChannelModel("default", model)),
+    audioModels: DEFAULT_AUDIO_MODEL_NAMES.map((model) => encodeChannelModel("default", model)),
     quality: "auto",
     size: "1:1",
     count: "1",
@@ -228,12 +230,12 @@ export const useConfigStore = create<ConfigStore>()(
                 const textModels = ensureModelListIncludes(
                     Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels, channels) : filterModelsByCapability(models, "text"),
                     channels,
-                    [DEFAULT_TEXT_MODEL_NAME],
+                    DEFAULT_TEXT_MODEL_NAMES,
                 );
                 const audioModels = ensureModelListIncludes(
                     Array.isArray(persistedConfig.audioModels) ? normalizeModelList(config.audioModels, channels) : filterModelsByCapability(models, "audio"),
                     channels,
-                    [DEFAULT_AUDIO_MODEL_NAME],
+                    DEFAULT_AUDIO_MODEL_NAMES,
                 );
                 const imageModel = normalizeDefaultModelSelection(config.imageModel || config.model, channels, DEFAULT_IMAGE_MODEL_NAME, LEGACY_IMAGE_DEFAULT_MODEL_NAMES);
                 const videoModel = normalizeDefaultModelSelection(config.videoModel, channels, DEFAULT_VIDEO_MODEL_NAMES[0], LEGACY_VIDEO_DEFAULT_MODEL_NAMES);
