@@ -17,9 +17,9 @@ export function CanvasPromptLibrary({ onSelect }: { onSelect: (prompt: string) =
             <Tooltip title="提示词库">
                 <Button
                     type="text"
-                    className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
+                    className="!h-10 !w-10 !min-w-10 shrink-0 !rounded-full !bg-transparent !p-0"
                     style={{ color: theme.node.text }}
-                    icon={<BookOpen className="size-3.5" />}
+                    icon={<BookOpen className="size-4.5" />}
                     onClick={() => setOpen(true)}
                     aria-label="提示词库"
                 />

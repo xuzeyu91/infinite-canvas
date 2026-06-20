@@ -10,3 +10,4 @@ description: 当前版本已实现但仍需人工验证的变更项
 - 音频和视频生成：选择 Gemini 调用格式时先给出不支持提示，仍需使用 OpenAI 兼容渠道。
 - 请求格式对齐（参考 BigBanana-AI-Director）：文本问答与在线 Agent 工具调用改为 `v1/chat/completions`，`gpt-audio-1.5` 默认改为 `v1/chat/completions` 音频输出格式；`viduq3-*` 改为 `v1/videos` JSON 网关参数，`sora-2`、`veo_3_1-fast`、`doubao-seedance-*` 使用 `v1/videos` 异步任务格式，火山任务模型仍走 `/contents/generations/tasks`。
 - Gemini 生图修复：`gemini-3-pro-image-preview` 按模型名自动走 Gemini 请求格式（避免误走 OpenAI images 接口）；请求体补齐 `generationConfig.imageConfig.aspectRatio`，与参考项目保持一致。
+- 画布 UI 优化：将节点配置/生成面板（Prompt Panel）的宽度从 `500px` 增加到 `580px`，并将模型选择器（ModelPicker）的默认高度统一为 `h-10`（40px），最大宽度限制为 `180px`，提示词库按钮也统一为 `h-10` 尺寸，彻底解决长模型名称（如 `gemini-2-pro-image-prev...`）导致右侧设置按钮与生成按钮重叠、挤压的问题。
