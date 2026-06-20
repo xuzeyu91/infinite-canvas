@@ -26,6 +26,7 @@ type CanvasNodeProps = {
     showImageInfo: boolean;
     resourceLabel?: CanvasResourceReference;
     mentionReferences?: CanvasResourceReference[];
+    videoReferenceStats?: VideoReferenceStats;
     renderPanel?: (node: CanvasNodeData) => ReactNode;
     renderNodeContent?: (node: CanvasNodeData) => ReactNode;
     batchCount?: number;
@@ -46,6 +47,12 @@ type CanvasNodeProps = {
     onGenerateImage?: (node: CanvasNodeData) => void;
     onViewImage?: (node: CanvasNodeData) => void;
     onContextMenu: (event: React.MouseEvent, nodeId: string) => void;
+};
+
+type VideoReferenceStats = {
+    imageCount: number;
+    maxImages: number;
+    exceeded: boolean;
 };
 
 type NodeContentRendererProps = {
@@ -81,6 +88,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     showImageInfo,
     resourceLabel,
     mentionReferences = [],
+    videoReferenceStats,
     renderPanel,
     renderNodeContent,
     batchCount = 0,
@@ -316,6 +324,7 @@ export const CanvasNode = React.memo(function CanvasNode({
 
                 {showImageInfo && hasImageContent ? <ImageInfoBar node={data} /> : null}
                 {resourceLabel ? <ResourceLabelBadge reference={resourceLabel} theme={theme} /> : null}
+                {data.type === CanvasNodeType.Video && videoReferenceStats ? <VideoReferenceBadge stats={videoReferenceStats} theme={theme} /> : null}
 
                 {!hasImageContent && !hasVideoContent && !hasAudioContent ? <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12" style={{ background: `linear-gradient(to top, ${theme.canvas.background}66, transparent)` }} /> : null}
 
@@ -448,6 +457,22 @@ function ResourceLabelBadge({ reference, theme }: { reference: CanvasResourceRef
             style={reference.active ? { background: theme.node.accent, color: "#ffffff" } : { background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.75)" }}
         >
             {reference.label}
+        </span>
+    );
+}
+
+function VideoReferenceBadge({ stats, theme }: { stats: VideoReferenceStats; theme: any }) {
+    return (
+        <span
+            className="pointer-events-none absolute left-2 top-2 z-30 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+            style={
+                stats.exceeded
+                    ? { background: "rgba(239, 68, 68, 0.92)", borderColor: "rgba(220, 38, 38, 0.95)", color: "#ffffff" }
+                    : { background: `${theme.toolbar.panel}d9`, borderColor: `${theme.node.stroke}cc`, color: theme.node.text }
+            }
+        >
+            参考图 {stats.imageCount}/{stats.maxImages}
+            {stats.exceeded ? "（超出）" : ""}
         </span>
     );
 }

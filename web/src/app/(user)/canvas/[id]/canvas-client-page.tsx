@@ -91,6 +91,12 @@ type CanvasGenerationRequest = {
     controller: AbortController;
 };
 
+type VideoReferenceStats = {
+    imageCount: number;
+    maxImages: number;
+    exceeded: boolean;
+};
+
 const VIDEO_NODE_MAX_WIDTH = 420;
 const VIDEO_NODE_MAX_HEIGHT = 420;
 const CONNECTION_HANDLE_HIT_RADIUS = 40;
@@ -572,6 +578,11 @@ function InfiniteCanvasPage() {
                 message.warning("配置节点之间不能连接");
                 return;
             }
+            const limitError = getVideoReferenceLimitError(connection, nodesRef.current, connectionsRef.current, effectiveConfig);
+            if (limitError) {
+                message.warning(limitError);
+                return;
+            }
             const { fromNodeId, toNodeId } = connection;
             const exists = connectionsRef.current.some((conn) => conn.fromNodeId === fromNodeId && conn.toNodeId === toNodeId);
             if (!exists) {
@@ -579,7 +590,7 @@ function InfiniteCanvasPage() {
             }
             setContextMenu(null);
         },
-        [message],
+        [effectiveConfig, message],
     );
 
     const createConnectedNode = useCallback(
@@ -599,6 +610,11 @@ function InfiniteCanvasPage() {
                 message.warning("配置节点之间不能连接");
                 return;
             }
+            const limitError = getVideoReferenceLimitError(connection, [...nodesRef.current, newNode], connectionsRef.current, effectiveConfig);
+            if (limitError) {
+                message.warning(limitError);
+                return;
+            }
             setNodes((prev) => [...prev, newNode]);
             setConnections((prev) => [...prev, { id: nanoid(), ...connection }]);
             setSelectedNodeIds(new Set([newNode.id]));
@@ -607,7 +623,7 @@ function InfiniteCanvasPage() {
             setPendingConnectionCreate(null);
             setConnecting(null);
         },
-        [effectiveConfig.canvasImageCount, effectiveConfig.count, effectiveConfig.imageModel, effectiveConfig.model, effectiveConfig.size, message, setConnecting],
+        [effectiveConfig, message, setConnecting],
     );
 
     const cancelPendingConnectionCreate = useCallback(() => {
@@ -722,6 +738,17 @@ function InfiniteCanvasPage() {
         });
         return map;
     }, [connections, nodes]);
+    const videoReferenceStatsByNodeId = useMemo(() => {
+        const map = new Map<string, VideoReferenceStats>();
+        nodes.forEach((node) => {
+            if (node.type !== CanvasNodeType.Video) return;
+            const imageCount = getInputSummary(buildNodeGenerationInputs(node.id, nodes, connections)).imageCount;
+            const nodeConfig = buildGenerationConfig(effectiveConfig, node, "video");
+            const maxImages = resolveVideoReferenceImageLimit(nodeConfig.model, nodeConfig.baseUrl);
+            map.set(node.id, { imageCount, maxImages, exceeded: imageCount > maxImages });
+        });
+        return map;
+    }, [connections, effectiveConfig, nodes]);
     const resourceContextNodeId = dialogNodeId || activeNodeId;
     const canvasResourceReferences = useMemo(() => buildCanvasResourceReferences(nodes, connections, resourceContextNodeId), [connections, nodes, resourceContextNodeId]);
     const resourceReferenceByNodeId = useMemo(() => new Map(canvasResourceReferences.map((reference) => [reference.nodeId, reference])), [canvasResourceReferences]);
@@ -1964,6 +1991,15 @@ function InfiniteCanvasPage() {
                 buildNodeGenerationContext(nodeId, nodesRef.current, connectionsRef.current, editingTextNode ? `请根据要求修改以下文本。\n\n原文：\n${sourceTextContent}\n\n修改要求：\n${prompt}` : prompt),
             );
             const effectivePrompt = generationContext.prompt.trim();
+            if (mode === "video") {
+                const maxImages = resolveVideoReferenceImageLimit(generationConfig.model, generationConfig.baseUrl);
+                if (generationContext.referenceImages.length > maxImages) {
+                    message.warning(buildVideoReferenceLimitMessage(sourceNode?.title || "视频节点", maxImages, generationContext.referenceImages.length));
+                    finishGenerationRequest(nodeId, runController);
+                    setRunningNodeId(null);
+                    return;
+                }
+            }
             if (runController.signal.aborted) {
                 finishGenerationRequest(nodeId, runController);
                 setRunningNodeId(null);
@@ -2308,6 +2344,13 @@ function InfiniteCanvasPage() {
                 return;
             }
             const retryImages = retryReferenceImages || [];
+            if (node.type === CanvasNodeType.Video) {
+                const maxImages = resolveVideoReferenceImageLimit(generationConfig.model, generationConfig.baseUrl);
+                if (retryImages.length > maxImages) {
+                    message.warning(buildVideoReferenceLimitMessage(node.title || "视频节点", maxImages, retryImages.length));
+                    return;
+                }
+            }
 
             setRunningNodeId(node.id);
             setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_LOADING, errorDetails: undefined } } : item)));
@@ -2583,6 +2626,7 @@ function InfiniteCanvasPage() {
                             showImageInfo={showImageInfo}
                             resourceLabel={resourceReferenceByNodeId.get(node.id)}
                             mentionReferences={mentionReferencesByNodeId.get(node.id) || []}
+                            videoReferenceStats={videoReferenceStatsByNodeId.get(node.id)}
                             renderPanel={(panelNode) =>
                                 panelNode.type === CanvasNodeType.Config ? (
                                     <CanvasConfigComposer
@@ -3123,6 +3167,38 @@ function normalizeConnection(firstNodeId: string, secondNodeId: string, nodes: C
     if (first.type === CanvasNodeType.Config && firstHandleType === "target") return { fromNodeId: second.id, toNodeId: first.id };
     if (first.type === CanvasNodeType.Config) return { fromNodeId: first.id, toNodeId: second.id };
     return { fromNodeId: first.id, toNodeId: second.id };
+}
+
+function getVideoReferenceLimitError(connection: Pick<CanvasConnection, "fromNodeId" | "toNodeId">, nodes: CanvasNodeData[], connections: CanvasConnection[], config: AiConfig) {
+    const nextConnections = [...connections, { id: "__preview__", ...connection }];
+    for (const node of nodes) {
+        if (!isVideoGenerationNode(node)) continue;
+        const beforeCount = getInputSummary(buildNodeGenerationInputs(node.id, nodes, connections)).imageCount;
+        const afterCount = getInputSummary(buildNodeGenerationInputs(node.id, nodes, nextConnections)).imageCount;
+        if (afterCount <= beforeCount) continue;
+        const nodeConfig = buildGenerationConfig(config, node, "video");
+        const maxImages = resolveVideoReferenceImageLimit(nodeConfig.model, nodeConfig.baseUrl);
+        if (afterCount > maxImages) return buildVideoReferenceLimitMessage(node.title || "视频节点", maxImages, afterCount);
+    }
+    return "";
+}
+
+function isVideoGenerationNode(node: CanvasNodeData) {
+    if (node.type === CanvasNodeType.Video) return true;
+    return node.type === CanvasNodeType.Config && (node.metadata?.generationMode || "image") === "video";
+}
+
+function buildVideoReferenceLimitMessage(nodeTitle: string, maxImages: number, currentImages: number) {
+    return `「${nodeTitle}」最多支持 ${maxImages} 张参考图，当前已连接 ${currentImages} 张，请减少后再试。`;
+}
+
+function resolveVideoReferenceImageLimit(model: string, baseUrl = "") {
+    const normalizedModel = String(model || "").trim().toLowerCase();
+    const normalizedBaseUrl = String(baseUrl || "").toLowerCase();
+    if (normalizedModel.includes("viduq3")|| normalizedModel.includes("veo")) return 2;
+    if (normalizedModel.includes("doubao-seedance")) return 9;
+    if (normalizedModel.includes("seedance") || normalizedModel.includes("251215") || normalizedModel.includes("260128")) return 9;
+    return 1;
 }
 
 function getInputSummary(inputs: NodeGenerationInput[]) {
