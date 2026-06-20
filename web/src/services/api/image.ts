@@ -91,6 +91,26 @@ type GeminiPayload = {
 };
 type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
 type RequestOptions = { signal?: AbortSignal };
+type ChatCompletionPayload = {
+    choices?: Array<{
+        message?: {
+            content?: unknown;
+            tool_calls?: unknown;
+        };
+        delta?: {
+            content?: unknown;
+        };
+    }>;
+    error?: { message?: string };
+    code?: number;
+    msg?: string;
+};
+type ChatCompletionMessage = {
+    role: "system" | "user" | "assistant" | "tool";
+    content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+    tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+    tool_call_id?: string;
+};
 
 const QUALITY_BASE: Record<string, number> = {
     low: 1024,
@@ -255,11 +275,26 @@ function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "gen
     return `${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`;
 }
 
-function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
+function shouldUseGoogleApiKeyHeader(baseUrl: string) {
+    try {
+        const hostname = new URL(baseUrl).hostname.toLowerCase();
+        return hostname.endsWith("googleapis.com");
+    } catch {
+        return false;
+    }
+}
+
+function geminiHeaders(config: Pick<AiConfig, "apiKey" | "baseUrl">) {
+    if (shouldUseGoogleApiKeyHeader(config.baseUrl)) {
+        return {
+            "x-goog-api-key": config.apiKey,
+            "Content-Type": "application/json",
+        } as Record<string, string>;
+    }
     return {
-        "x-goog-api-key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
-    };
+    } as Record<string, string>;
 }
 
 function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): ResponseInputMessage[] {
@@ -307,6 +342,192 @@ function parseToolResponse(payload: ResponseApiPayload): ToolResponseResult {
         }))
         .filter((item) => item.id && item.function.name);
     return { content, toolCalls };
+}
+
+function withSystemTextMessages(config: AiConfig, messages: AiTextMessage[]) {
+    const systemPrompt = config.systemPrompt.trim();
+    return systemPrompt ? [{ role: "system" as const, content: systemPrompt }, ...messages] : messages;
+}
+
+function toChatCompletionContent(content: ResponseMessageContent): string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> {
+    if (!Array.isArray(content)) return String(content || "");
+    return content.map((item) => (item.type === "text" ? { type: "text" as const, text: item.text } : { type: "image_url" as const, image_url: { url: item.image_url.url } }));
+}
+
+function toChatCompletionMessages(messages: ResponseInputMessage[]): ChatCompletionMessage[] {
+    return messages.flatMap((message): ChatCompletionMessage[] => {
+        if ("type" in message) {
+            return [
+                {
+                    role: "assistant" as const,
+                    content: "",
+                    tool_calls: [
+                        {
+                            id: message.call_id,
+                            type: "function" as const,
+                            function: {
+                                name: message.name,
+                                arguments: message.arguments,
+                            },
+                        },
+                    ],
+                },
+            ];
+        }
+        if (message.role === "tool") {
+            return [
+                {
+                    role: "tool" as const,
+                    tool_call_id: message.tool_call_id,
+                    content: message.content,
+                },
+            ];
+        }
+        return [
+            {
+                role: message.role,
+                content: toChatCompletionContent(message.content || ""),
+            },
+        ];
+    });
+}
+
+function toChatCompletionMessagesFromText(messages: AiTextMessage[]) {
+    return messages.map((message): ChatCompletionMessage => ({
+        role: message.role,
+        content: toChatCompletionContent(message.content || ""),
+    }));
+}
+
+function toChatCompletionTools(tools: ResponseFunctionTool[]) {
+    return tools.map((tool) => ({
+        type: "function" as const,
+        function: {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: tool.function.parameters,
+        },
+    }));
+}
+
+function toChatCompletionToolChoice(toolChoice: ToolChoice) {
+    if (typeof toolChoice === "object") {
+        return {
+            type: "function" as const,
+            function: { name: toolChoice.name },
+        };
+    }
+    return toolChoice;
+}
+
+function parseChatCompletionContent(content: unknown) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content
+        .map((item) => {
+            if (typeof item === "string") return item;
+            if (!isRecord(item)) return "";
+            if (typeof item.text === "string") return item.text;
+            return "";
+        })
+        .join("");
+}
+
+function parseChatCompletionToolCalls(value: unknown) {
+    if (!Array.isArray(value)) return [] as ResponseToolCall[];
+    return value
+        .map((item, index) => {
+            if (!isRecord(item)) return null;
+            const fn = isRecord(item.function) ? item.function : {};
+            const name = stringValue(fn.name);
+            const args = typeof fn.arguments === "string" ? fn.arguments : "{}";
+            const id = stringValue(item.id) || `tool_call_${index + 1}`;
+            if (!name) return null;
+            return {
+                id,
+                type: "function" as const,
+                function: {
+                    name,
+                    arguments: args,
+                },
+            };
+        })
+        .filter((item): item is ResponseToolCall => Boolean(item));
+}
+
+function validateChatCompletionPayload(payload: ChatCompletionPayload) {
+    if (typeof payload.code === "number" && payload.code !== 0) throw new Error(payload.msg || "请求失败");
+    if (payload.error?.message) throw new Error(payload.error.message);
+}
+
+function parseChatCompletionResult(payload: ChatCompletionPayload): ToolResponseResult {
+    validateChatCompletionPayload(payload);
+    const message = payload.choices?.[0]?.message;
+    return {
+        content: parseChatCompletionContent(message?.content),
+        toolCalls: parseChatCompletionToolCalls(message?.tool_calls),
+    };
+}
+
+function consumeChatCompletionStreamBlock(block: string, text: string, onDelta?: (text: string) => void) {
+    const data = block
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).replace(/^ /, ""))
+        .join("\n")
+        .trim();
+    if (!data || data === "[DONE]") return text;
+    const payload = JSON.parse(data) as ChatCompletionPayload;
+    validateChatCompletionPayload(payload);
+    const delta = parseChatCompletionContent(payload.choices?.[0]?.delta?.content);
+    if (!delta) return text;
+    const next = text + delta;
+    onDelta?.(next);
+    return next;
+}
+
+async function requestOpenAIChatCompletion(config: AiConfig, body: Record<string, unknown>, options?: RequestOptions) {
+    const response = await fetch(aiApiUrl(config, "/chat/completions"), {
+        method: "POST",
+        headers: aiHeaders(config, "application/json"),
+        body: JSON.stringify(body),
+        signal: options?.signal,
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, "请求失败"));
+    const payload = (await response.json()) as ChatCompletionPayload;
+    return parseChatCompletionResult(payload);
+}
+
+async function requestOpenAIChatCompletionStream(config: AiConfig, body: Record<string, unknown>, onDelta?: (text: string) => void, options?: RequestOptions) {
+    const response = await fetch(aiApiUrl(config, "/chat/completions"), {
+        method: "POST",
+        headers: { ...aiHeaders(config, "application/json"), Accept: "text/event-stream" },
+        body: JSON.stringify({ ...body, stream: true }),
+        signal: options?.signal,
+    });
+    if (!response.ok) throw new Error(await readFetchError(response, "请求失败"));
+    if (!response.body) return requestOpenAIChatCompletion(config, body, options);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    let buffer = "";
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        for (;;) {
+            const match = buffer.match(/\r?\n\r?\n/);
+            if (!match) break;
+            const boundaryIndex = match.index ?? -1;
+            if (boundaryIndex < 0) break;
+            text = consumeChatCompletionStreamBlock(buffer.slice(0, boundaryIndex), text, onDelta);
+            buffer = buffer.slice(boundaryIndex + match[0].length);
+        }
+    }
+    const tail = decoder.decode();
+    if (tail) buffer += tail;
+    if (buffer.trim()) text = consumeChatCompletionStreamBlock(buffer, text, onDelta);
+    return { content: text, toolCalls: [] };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -377,8 +598,10 @@ function consumeResponseStreamText(state: ResponseStreamState, text: string, onD
     for (;;) {
         const match = state.buffer.match(/\r?\n\r?\n/);
         if (!match) break;
-        consumeResponseStreamBlock(state.buffer.slice(0, match.index), state, onDelta);
-        state.buffer = state.buffer.slice(match.index + match[0].length);
+        const boundaryIndex = match.index ?? -1;
+        if (boundaryIndex < 0) break;
+        consumeResponseStreamBlock(state.buffer.slice(0, boundaryIndex), state, onDelta);
+        state.buffer = state.buffer.slice(boundaryIndex + match[0].length);
     }
     if (flush && state.buffer.trim()) {
         consumeResponseStreamBlock(state.buffer, state, onDelta);
@@ -525,8 +748,10 @@ function consumeGeminiStreamText(state: GeminiStreamState, text: string, onDelta
     for (;;) {
         const match = state.buffer.match(/\r?\n\r?\n/);
         if (!match) break;
-        consumeGeminiStreamBlock(state.buffer.slice(0, match.index), state, onDelta);
-        state.buffer = state.buffer.slice(match.index + match[0].length);
+        const boundaryIndex = match.index ?? -1;
+        if (boundaryIndex < 0) break;
+        consumeGeminiStreamBlock(state.buffer.slice(0, boundaryIndex), state, onDelta);
+        state.buffer = state.buffer.slice(boundaryIndex + match[0].length);
     }
     if (flush && state.buffer.trim()) {
         consumeGeminiStreamBlock(state.buffer, state, onDelta);
@@ -690,9 +915,9 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
             if (answer === "没有返回内容") onDelta(answer);
             return answer;
         }
-        const answer = (await requestStreamingResponse(requestConfig, {
+        const answer = (await requestOpenAIChatCompletionStream(requestConfig, {
             model: requestConfig.model,
-            input: toResponseInput(withSystemMessage(requestConfig, messages)),
+            messages: toChatCompletionMessagesFromText(withSystemTextMessages(requestConfig, messages)),
         }, onDelta, options)).content || "没有返回内容";
         if (answer === "没有返回内容") onDelta(answer);
         return answer;
@@ -707,13 +932,15 @@ export async function requestToolResponse(config: AiConfig, messages: ResponseIn
         if (requestConfig.apiFormat === "gemini") {
             return await requestGeminiStreamingResponse(requestConfig, toGeminiBody(requestConfig, messages, toGeminiToolOptions(tools, toolChoice)), onDelta, options);
         }
-        return await requestStreamingResponse(requestConfig, {
+        const result = await requestOpenAIChatCompletion(requestConfig, {
             model: requestConfig.model,
-            input: toResponseInput(withSystemMessage(requestConfig, messages)),
-            tools: tools.map(toResponseTool),
-            tool_choice: toolChoice,
-            parallel_tool_calls: false,
-        }, onDelta, options);
+            messages: toChatCompletionMessages(withSystemMessage(requestConfig, messages)),
+            tools: toChatCompletionTools(tools),
+            tool_choice: toChatCompletionToolChoice(toolChoice),
+            stream: false,
+        }, options);
+        if (result.content && onDelta) onDelta(result.content);
+        return result;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
     }

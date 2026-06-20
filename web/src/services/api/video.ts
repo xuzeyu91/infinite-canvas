@@ -3,7 +3,7 @@ import axios from "axios";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { getMediaBlob, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
-import { boolConfig, buildSeedancePromptText, isSeedanceVideoConfig, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
+import { boolConfig, buildSeedancePromptText, isArkPlanBaseUrl, normalizeSeedanceDuration, normalizeSeedanceRatio, normalizeSeedanceResolution, seedanceVideoReferenceError, SEEDANCE_REFERENCE_LIMITS } from "@/lib/seedance-video";
 import { buildApiUrl, modelOptionName, resolveModelRequestConfig, type AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
@@ -18,6 +18,7 @@ type SeedanceTask = {
 };
 type ApiEnvelope<T> = T | { code?: number; data?: T | null; msg?: string };
 type RequestOptions = { signal?: AbortSignal };
+type OpenAIVideoTaskOptions = { useReferenceArray: boolean; maxReferences: number };
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
 export type VideoGenerationTask = { id: string; provider: "openai" | "seedance"; model: string };
@@ -32,6 +33,27 @@ function aiHeaders(config: AiConfig, contentType?: string) {
         Authorization: `Bearer ${config.apiKey}`,
         ...(contentType ? { "Content-Type": contentType } : {}),
     };
+}
+
+function normalizeVideoModelId(model: string) {
+    return modelOptionName(model).trim().toLowerCase();
+}
+
+function isViduGatewayModel(model: string) {
+    return model.includes("viduq3");
+}
+
+function isDoubaoOpenAiModel(model: string) {
+    return model.includes("doubao-seedance");
+}
+
+function shouldUseSeedanceTaskApi(config: AiConfig, model: string) {
+    return isArkPlanBaseUrl(config.baseUrl) || model.includes("251215") || model.includes("260128");
+}
+
+function resolveOpenAIVideoTaskOptions(model: string): OpenAIVideoTaskOptions {
+    if (isDoubaoOpenAiModel(model) || model.includes("veo")) return { useReferenceArray: true, maxReferences: 9 };
+    return { useReferenceArray: false, maxReferences: 1 };
 }
 
 export async function requestVideoGeneration(config: AiConfig, prompt: string, references: ReferenceImage[] = [], videoReferences: ReferenceVideo[] = [], audioReferences: ReferenceAudio[] = [], options?: RequestOptions): Promise<VideoGenerationResult> {
@@ -52,13 +74,18 @@ export async function createVideoGenerationTask(config: AiConfig, prompt: string
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     assertVideoConfig(requestConfig, requestConfig.model);
-    if (isSeedanceVideoConfig(requestConfig)) {
+    const normalizedModel = normalizeVideoModelId(selectedModel);
+    if (shouldUseSeedanceTaskApi(requestConfig, normalizedModel)) {
         return createSeedanceTask(requestConfig, selectedModel, prompt, references, videoReferences, audioReferences, options);
     }
-    if (videoReferences.length || audioReferences.length) {
-        throw new Error("当前视频接口不支持参考视频或参考音频，请切换到 Seedance 2.0 / 火山 Agent Plan 模型，或移除参考素材");
+    if (isViduGatewayModel(normalizedModel)) {
+        if (videoReferences.length || audioReferences.length) throw new Error("Vidu Q3 当前不支持参考视频或参考音频，请只保留参考图片");
+        return createViduGatewayTask(requestConfig, selectedModel, prompt, references, options);
     }
-    return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, options);
+    if (videoReferences.length || audioReferences.length) {
+        throw new Error("当前视频接口不支持参考视频或参考音频，请移除参考素材后重试");
+    }
+    return createOpenAIVideoTask(requestConfig, selectedModel, prompt, references, resolveOpenAIVideoTaskOptions(normalizedModel), options);
 }
 
 export async function pollVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -73,7 +100,7 @@ export async function storeGeneratedVideo(result: VideoGenerationResult): Promis
     throw new Error("视频接口没有返回可播放的视频");
 }
 
-async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], taskOptions: OpenAIVideoTaskOptions, options?: RequestOptions): Promise<VideoGenerationTask> {
     const body = new FormData();
     body.append("model", modelOptionName(model));
     body.append("prompt", prompt);
@@ -81,14 +108,43 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     if (normalizeVideoSize(config.size)) body.append("size", normalizeVideoSize(config.size)!);
     body.append("resolution_name", normalizeVideoResolution(config.vquality));
     body.append("preset", "normal");
-    const files = await Promise.all(references.slice(0, 7).map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
-    files.forEach((file) => body.append("input_reference[]", file));
+    const files = await Promise.all(references.slice(0, taskOptions.maxReferences).map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
+    if (taskOptions.useReferenceArray) {
+        files.forEach((file) => body.append("input_reference[]", file));
+    } else if (files[0]) {
+        body.append("input_reference", files[0]);
+    }
     try {
         const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), body, { headers: aiHeaders(config), signal: options?.signal })).data);
         if (!created.id) throw new Error("视频接口没有返回任务 ID");
         return { id: created.id, provider: "openai", model };
     } catch (error) {
         throw new Error(readAxiosError(error, "视频任务创建失败"));
+    }
+}
+
+async function createViduGatewayTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: RequestOptions): Promise<VideoGenerationTask> {
+    const firstReference = references[0];
+    if (!firstReference) throw new Error("Vidu Q3 模型需要至少一张参考图作为首帧");
+    const startImage = await imageToDataUrl(firstReference);
+    const endImage = references[1] ? await imageToDataUrl(references[1]) : "";
+    const payload = {
+        model: modelOptionName(model),
+        prompt,
+        duration: Number(normalizeVideoSeconds(config.videoSeconds)),
+        images: [startImage, endImage].filter(Boolean),
+        metadata: {
+            resolution: "1080p",
+            audio: true,
+            audio_type: "all",
+        },
+    };
+    try {
+        const created = unwrapVideoResponse((await axios.post<ApiVideoResponse>(aiApiUrl(config, "/videos"), payload, { headers: aiHeaders(config, "application/json"), signal: options?.signal })).data);
+        if (!created.id) throw new Error("Vidu 接口没有返回任务 ID");
+        return { id: created.id, provider: "openai", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, "Vidu 任务创建失败"));
     }
 }
 

@@ -22,17 +22,52 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
     const model = requestConfig.model.trim();
     assertAudioConfig(requestConfig, model);
     const format = normalizeAudioFormatValue(config.audioFormat);
+    const voice = normalizeAudioVoiceValue(config.audioVoice);
+    const speed = Number(normalizeAudioSpeedValue(config.audioSpeed));
     const instructions = config.audioInstructions.trim();
+    const chatPrompt = instructions ? `${instructions}\n\n${prompt}` : prompt;
 
     try {
+        if (isGptAudioModel(model)) {
+            const response = await axios.post<{
+                choices?: Array<{
+                    message?: {
+                        audio?: {
+                            data?: string;
+                        };
+                    };
+                }>;
+                code?: number;
+                msg?: string;
+                error?: { message?: string };
+            }>(
+                aiApiUrl(requestConfig, "/chat/completions"),
+                {
+                    model,
+                    modalities: ["text", "audio"],
+                    audio: {
+                        voice,
+                        format,
+                    },
+                    messages: [{ role: "user", content: chatPrompt }],
+                    temperature: 0.6,
+                },
+                { headers: aiHeaders(requestConfig), signal: options?.signal },
+            );
+            if (typeof response.data?.code === "number" && response.data.code !== 0) throw new Error(response.data.msg || "音频生成失败");
+            if (response.data?.error?.message) throw new Error(response.data.error.message);
+            const audioBase64 = response.data?.choices?.[0]?.message?.audio?.data;
+            if (!audioBase64) throw new Error("模型未返回音频数据，请检查当前模型是否支持音频输出");
+            return base64ToAudioBlob(audioBase64, format);
+        }
         const response = await axios.post<Blob>(
             aiApiUrl(requestConfig, "/audio/speech"),
             {
                 model,
                 input: prompt,
-                voice: normalizeAudioVoiceValue(config.audioVoice),
+                voice,
                 response_format: format,
-                speed: Number(normalizeAudioSpeedValue(config.audioSpeed)),
+                speed,
                 ...(instructions ? { instructions } : {}),
             },
             { headers: aiHeaders(requestConfig), responseType: "blob", signal: options?.signal },
@@ -81,4 +116,16 @@ function statusMessage(status: number | undefined, fallback: string) {
     if (status === 401 || status === 403) return "鉴权失败，请检查 API Key、套餐权限或模型权限";
     if (status === 429) return "请求被限流或额度不足，请稍后重试";
     return status ? `${fallback}（${status}）` : fallback;
+}
+
+function isGptAudioModel(model: string) {
+    return model.toLowerCase().includes("gpt-audio");
+}
+
+function base64ToAudioBlob(base64: string, format: string) {
+    const normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new Blob([bytes], { type: audioMimeType(format) });
 }
