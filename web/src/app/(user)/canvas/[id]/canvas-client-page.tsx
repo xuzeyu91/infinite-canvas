@@ -140,6 +140,11 @@ export default function CanvasPage() {
     const [accountChecked, setAccountChecked] = useState(false);
     const accountCheckedRef = useRef(false);
 
+    const hasLocalApiKey = () => {
+        const state = useConfigStore.getState();
+        return Boolean(state.config.apiKey.trim() || state.config.channels.some((channel) => channel.apiKey.trim()));
+    };
+
     useEffect(() => {
         setMounted(true);
     }, []);
@@ -150,6 +155,11 @@ export default function CanvasPage() {
         let cancelled = false;
         void (async () => {
             try {
+                if (hasLocalApiKey()) {
+                    if (cancelled) return;
+                    setAccountReady(true);
+                    return;
+                }
                 const session = await bootstrapNewApiSession();
                 if (cancelled) return;
                 if (session?.userId) {
@@ -157,13 +167,13 @@ export default function CanvasPage() {
                     return;
                 }
                 setAccountReady(false);
-                message.warning("请先登录账号中心后再进入画布");
+                message.warning("请先在账号中心登录同步 Key，或在渠道页手动填写 API Key");
                 openConfigDialog(true);
                 router.replace("/canvas");
             } catch {
                 if (cancelled) return;
                 setAccountReady(false);
-                message.warning("请先登录账号中心后再进入画布");
+                message.warning("请先在账号中心登录同步 Key，或在渠道页手动填写 API Key");
                 openConfigDialog(true);
                 router.replace("/canvas");
             } finally {

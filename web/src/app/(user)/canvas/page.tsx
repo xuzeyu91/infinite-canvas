@@ -31,6 +31,11 @@ export default function CanvasPage() {
     const firstProjectId = projects[0]?.id;
     const checkingSessionRef = useRef(false);
 
+    const hasLocalApiKey = () => {
+        const state = useConfigStore.getState();
+        return Boolean(state.config.apiKey.trim() || state.config.channels.some((channel) => channel.apiKey.trim()));
+    };
+
     useEffect(() => {
         if (!hydrated || !firstProjectId) return;
         const targetPath = `/canvas/${firstProjectId}`;
@@ -47,16 +52,17 @@ export default function CanvasPage() {
     }, [firstProjectId, hydrated, router]);
 
     const ensureAccountReady = async () => {
+        if (hasLocalApiKey()) return true;
         if (checkingSessionRef.current) return false;
         checkingSessionRef.current = true;
         try {
             const session = await bootstrapNewApiSession();
             if (session?.userId) return true;
-            message.warning("请先登录账号中心后再进入画布");
+            message.warning("请先在账号中心登录同步 Key，或在渠道页手动填写 API Key");
             openConfigDialog(true);
             return false;
         } catch {
-            message.warning("请先登录账号中心后再进入画布");
+            message.warning("请先在账号中心登录同步 Key，或在渠道页手动填写 API Key");
             openConfigDialog(true);
             return false;
         } finally {
