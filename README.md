@@ -91,9 +91,9 @@ http://localhost:3000
 
 ### 2. Docker 部署
 
-如果你的 Docker 版本只支持 `docker-compose`，把下面命令里的 `docker compose` 替换成 `docker-compose` 即可。
+如果你的 Docker 版本只支持 `docker-compose`，把下面命令里的 `docker-compose` 替换成 `docker-compose` 即可。
 
-#### 方式一：Docker Compose（推荐）
+#### 方式一：docker-compose（推荐）
 
 首次部署（克隆 + 构建 + 启动）：
 
@@ -102,7 +102,7 @@ git clone https://github.com/shuyu-labs/BigBanana-Canvas.git
 cd BigBanana-Canvas
 
 # 构建并启动（会重新构建镜像）
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
 更新到最新代码：
@@ -111,21 +111,21 @@ docker compose up -d --build
 git pull
 
 # 常规更新：重新构建并启动
-docker compose up -d --build
+docker-compose up -d --build
 
 # 如果怀疑构建缓存导致未更新：无缓存构建 + 强制重建容器
-docker compose build --no-cache
-docker compose up -d --force-recreate
+docker-compose build --no-cache
+docker-compose up -d --force-recreate
 ```
 
 常用命令：
 
 ```bash
 # 查看日志
-docker compose logs -f app
+docker-compose logs -f app
 
 # 停止并删除容器（不删除镜像）
-docker compose down
+docker-compose down
 ```
 
 启动后访问 `http://localhost:3006`。
