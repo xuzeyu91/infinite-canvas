@@ -55,14 +55,29 @@ function parsePreviewMarkdown(value: string) {
     for (const rawBlock of value.split(/\r?\n\s*\r?\n/)) {
         const content = rawBlock.trim();
         if (!content) continue;
-        const linkedImage = content.match(/^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$/);
+        const linkedImage = content.match(/^\[\s*!\[([^\]]*)\]\(([^)]+)\)\s*\]\(([^)]+)\)$/);
         if (linkedImage) {
             blocks.push({ type: "image", alt: linkedImage[1] || "", src: linkedImage[2], href: linkedImage[3] });
+            continue;
+        }
+        const wrappedImage = content.match(/^\[\s*!\[([^\]]*)\]\(([^)]+)\)\s*\]$/);
+        if (wrappedImage) {
+            blocks.push({ type: "image", alt: wrappedImage[1] || "", src: wrappedImage[2] });
             continue;
         }
         const image = content.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
         if (image) {
             blocks.push({ type: "image", alt: image[1] || "", src: image[2] });
+            continue;
+        }
+        const imageTagWithSrcFirst = content.match(/^<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>$/i);
+        if (imageTagWithSrcFirst) {
+            blocks.push({ type: "image", alt: imageTagWithSrcFirst[2] || "", src: imageTagWithSrcFirst[1] });
+            continue;
+        }
+        const imageTagWithAltFirst = content.match(/^<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*>$/i);
+        if (imageTagWithAltFirst) {
+            blocks.push({ type: "image", alt: imageTagWithAltFirst[1] || "", src: imageTagWithAltFirst[2] });
             continue;
         }
         const link = content.match(/^\[([^\]]*)\]\(([^)]+)\)$/);
