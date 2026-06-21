@@ -860,7 +860,11 @@ export function AccountCenterPanel() {
                                             <Input value={loginForm.username} onChange={(event) => setLoginForm((current) => ({ ...current, username: event.target.value }))} />
                                         </Form.Item>
                                         <Form.Item label="密码">
-                                            <Input.Password value={loginForm.password} onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))} />
+                                            <Input.Password
+                                                value={loginForm.password}
+                                                onChange={(event) => setLoginForm((current) => ({ ...current, password: event.target.value }))}
+                                                onPressEnter={() => void handleLogin()}
+                                            />
                                         </Form.Item>
                                         {needsTwoFactor ? (
                                             <Form.Item label="2FA 验证码">
