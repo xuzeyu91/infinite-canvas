@@ -137,7 +137,7 @@ type ConfigStore = {
 
 function isVideoModelName(model: string) {
     const value = modelOptionName(model).toLowerCase();
-    return value.includes("seedance") || value.includes("video") || value.includes("sora") || value.includes("veo") || value.includes("vidu") || value.includes("kling") || value.includes("wan") || value.includes("hailuo");
+    return value.includes("seedance") || value.includes("video") || value.includes("sora") || value.includes("veo") || value.includes("vidu") || value.includes("kling") || value.includes("wan") || value.includes("hailuo") || value.includes("happyhorse");
 }
 
 function isImageModelName(model: string) {
@@ -237,10 +237,10 @@ export const useConfigStore = create<ConfigStore>()(
                     channels,
                     DEFAULT_AUDIO_MODEL_NAMES,
                 );
-                const imageModel = normalizeDefaultModelSelection(config.imageModel || config.model, channels, DEFAULT_IMAGE_MODEL_NAME, LEGACY_IMAGE_DEFAULT_MODEL_NAMES);
-                const videoModel = normalizeDefaultModelSelection(config.videoModel, channels, DEFAULT_VIDEO_MODEL_NAMES[0], LEGACY_VIDEO_DEFAULT_MODEL_NAMES);
-                const textModel = normalizeDefaultModelSelection(config.textModel || config.model, channels, DEFAULT_TEXT_MODEL_NAME, LEGACY_TEXT_DEFAULT_MODEL_NAMES);
-                const audioModel = normalizeDefaultModelSelection(config.audioModel, channels, DEFAULT_AUDIO_MODEL_NAME, LEGACY_AUDIO_DEFAULT_MODEL_NAMES);
+                const imageModel = normalizeDefaultModelSelection(config.imageModel || config.model, channels, DEFAULT_IMAGE_MODEL_NAME, LEGACY_IMAGE_DEFAULT_MODEL_NAMES, "image");
+                const videoModel = normalizeDefaultModelSelection(config.videoModel, channels, DEFAULT_VIDEO_MODEL_NAMES[0], LEGACY_VIDEO_DEFAULT_MODEL_NAMES, "video");
+                const textModel = normalizeDefaultModelSelection(config.textModel || config.model, channels, DEFAULT_TEXT_MODEL_NAME, LEGACY_TEXT_DEFAULT_MODEL_NAMES, "text");
+                const audioModel = normalizeDefaultModelSelection(config.audioModel, channels, DEFAULT_AUDIO_MODEL_NAME, LEGACY_AUDIO_DEFAULT_MODEL_NAMES, "audio");
                 const model = imageModel || normalizeDefaultModelSelection(config.model || config.imageModel, channels, DEFAULT_IMAGE_MODEL_NAME);
                 return {
                     ...current,
@@ -432,11 +432,13 @@ function ensureModelListIncludes(list: string[], channels: ModelChannel[], requi
     return uniqueModelOptions([...list, ...required]);
 }
 
-function normalizeDefaultModelSelection(value: string | undefined, channels: ModelChannel[], fallbackModelName: string, legacyDefaults?: Set<string>) {
+function normalizeDefaultModelSelection(value: string | undefined, channels: ModelChannel[], fallbackModelName: string, legacyDefaults?: Set<string>, capability?: ModelCapability) {
+    const matchesCapability = (model: string) => !capability || modelMatchesCapability(model, capability);
     const current = normalizeModelOptionValue(value, channels);
-    if (current && !legacyDefaults?.has(modelOptionName(current))) return current;
+    if (current && !legacyDefaults?.has(modelOptionName(current)) && matchesCapability(current)) return current;
     const fallback = normalizeModelOptionValue(fallbackModelName, channels);
-    return fallback || current;
+    if (fallback && matchesCapability(fallback)) return fallback;
+    return current && matchesCapability(current) ? current : "";
 }
 
 export function buildApiUrl(baseUrl: string, path: string) {

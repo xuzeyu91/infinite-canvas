@@ -267,7 +267,9 @@ export function AccountCenterPanel() {
                     setSession(sessionResult.value);
                     if (sessionResult.value) {
                         await refreshProfile(true);
-                        await syncProjectKey(false);
+                        if (!projectApiKey.trim()) {
+                            await syncProjectKey(false);
+                        }
                         await Promise.all([loadTokens(1), loadTopupInfo()]);
                     }
                 } else {
@@ -277,7 +279,7 @@ export function AccountCenterPanel() {
                 setStatusLoading(false);
             }
         },
-        [loadTokens, loadTopupInfo, message, refreshProfile, syncProjectKey],
+        [loadTokens, loadTopupInfo, message, projectApiKey, refreshProfile, syncProjectKey],
     );
 
     useEffect(() => {

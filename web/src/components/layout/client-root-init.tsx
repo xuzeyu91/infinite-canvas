@@ -55,6 +55,9 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         handledSessionKeySync.current = true;
         void (async () => {
             try {
+                const state = useConfigStore.getState();
+                const hasConfiguredKey = Boolean(state.config.apiKey.trim() || state.config.channels.some((channel) => channel.apiKey.trim()));
+                if (hasConfiguredKey) return;
                 const session = await bootstrapNewApiSession();
                 if (!session) return;
                 const result = await ensurePrimaryTokenKey(true);
